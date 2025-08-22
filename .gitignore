@@ -1,0 +1,7 @@
+
+*.rar
+*.exe
+dist
+build
+*.apk
+*.pkl

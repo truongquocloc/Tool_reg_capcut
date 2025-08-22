@@ -1,0 +1,4 @@
+
+pyinstaller MainHandle.py --onefile --console  
+
+pyinstaller main.py --onefile --console  
