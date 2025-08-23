@@ -60,6 +60,7 @@ def create_account(address: str, password: str, userAgent=None):
     if response.status_code == 201:
       return response.json()
     elif response.status_code  == 429:
+      print(response)
       time.sleep(random.randint(1,5))
       return create_account(address, password)
     else:
@@ -189,7 +190,5 @@ def get_messages_code(email, password, userAgent=None):
     else:
         return None
   
-# if __name__ == "__main__":
-#   listUserAgent = getUserAgent()
-#   print(get_messages_code('aquamarinehelene@powerscrews.com', 'B,{,5eend]'))
+
   

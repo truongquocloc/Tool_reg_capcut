@@ -4,10 +4,13 @@ from datetime import datetime, timedelta
 import string
 import time
 from reg_mail_tm import regMail, get_messages_code
+from reg_tempmail import create_temp_mail, get_temp_mail_messages
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import threading
+from evpn import ExpressVpnApi 
 
 lock = threading.Lock()
+changIP = False
 
 def encode_email( email: str) -> str:
     SHIFT = {
@@ -107,8 +110,26 @@ def updateAccountReg(account):
   with open('account_reg.txt', 'a') as f:
     f.write(account + '\n')
 
-def registerCC(email_encode, password_encode):
-    
+def changIpByExpressVPN():
+    try:
+      with ExpressVpnApi() as api:
+        api.start_express_vpn()
+        status = api.get_status()
+        if status["info"]['connected']:
+          api.disconnect()
+          api.wait_for_disconnect()
+        location_id = status["info"]["last_location"]['id']
+        time.sleep(5)
+        location_id = str(location_id)
+        api.connect(location_id)
+        api.wait_for_connection()
+        print("Đã change ip =======================================================")
+    except Exception as e:
+      print("Lỗi đổi IP: ", e)
+
+def registerCC(email_encode, password_encode, userAgent=None):
+    if not userAgent:
+      userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
     url = "https://www.capcut.com/passport/web/email/send_code/"
     params = {
         "aid": "348188",
@@ -141,14 +162,16 @@ def registerCC(email_encode, password_encode):
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-origin",
         "store-country-code": "vn",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "user-agent": userAgent,
         "x-tt-passport-csrf-token": "b7b25f7b7521a6283a46dce9040d7386"
     }
 
     response = requests.post(url, params=params, data=payload, headers=headers)
     return response.json()['message']
 
-def register_verify_login(email_encode, password_encode, code_encode):
+def register_verify_login(email_encode, password_encode, code_encode, userAgent=None):
+    if not userAgent:
+      userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
     url = "https://www.capcut.com/passport/web/email/register_verify_login/"
     params = {
         "aid": "348188",
@@ -173,7 +196,7 @@ def register_verify_login(email_encode, password_encode, code_encode):
         "sec-fetch-mode": "cors",
         "sec-fetch-site": "same-origin",
         "store-country-code": "vn",
-        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+        "user-agent": userAgent,
         "x-tt-passport-csrf-token": "b7b25f7b7521a6283a46dce9040d7386"
     }
 
@@ -191,49 +214,132 @@ def register_verify_login(email_encode, password_encode, code_encode):
 
     response = requests.post(url, params=params, headers=headers, data=data)
     result = response.json()
+    # print(result)
     if result['message'] == 'success':
         return result['data']['user_id']
     else:
         return None
 
 
-def regAccountCC():
-    while True:
-      try:
-        userAgent = getUserAgent()
-        email = regMail(userAgent)
-        password = random_password()
-        # print(email + '|' + password)
-        email_encode = encode_email(email)
-        password_encode = encode_password(password)
-        result = registerCC(email_encode, password_encode)
-        if result != 'success':
-            print("Bị lỗi trong quá trình đăng ký account !!!")
-        # print(result)
-        time.sleep(5)
-        for i in range(10):
-          code = get_messages_code(email, '123456a@', userAgent)
-          # print('Code: ', code)
-          if code and code != 'watting':
-            code_encode = encode_password(code)
-            userID = register_verify_login(email_encode, password_encode, code_encode)
-            if userID:
-                line = email + '|' + password + '|' + str(userID)
-                print(line)
-                with lock:
-                    updateAccountReg(line)
-                break
-          time.sleep(2)
-          # print("Đang đợi code")
-      except Exception as error:
-          pass
+def regAccountCC(emailSource='mail.tm'):
+    global changIP
+    if emailSource not in ['mail.tm', 'temp-mail.io']:
+        print("Email source không hợp lệ. Chỉ chấp nhận 'mail.tm' hoặc 'temp-mail.io'.")
+        return
+    if emailSource == 'mail.tm':
+        while True:
+          try:
+            userAgent = getUserAgent()
+            email = regMail(userAgent)
+            password = random_password()
+            # print(email + '|' + password)
+            email_encode = encode_email(email)
+            password_encode = encode_password(password)
+            result = registerCC(email_encode, password_encode, userAgent)
+            if result != 'success':
+                if changIP == False:
+                    with lock:
+                      changIP = True
+                    print("Đang đổi IP...")
+                    changIpByExpressVPN()
+                    time.sleep(1)
+                    with lock:
+                      changIP = False
+            # print(result)
+            time.sleep(5)
+            for i in range(10):
+              code = get_messages_code(email, '123456a@', userAgent)
+              # print('Code: ', code)
+              if code and code != 'watting':
+                code_encode = encode_password(code)
+                userID = register_verify_login(email_encode, password_encode, code_encode, userAgent)
+                if userID:
+                    line = email + '|' + password + '|' + str(userID)
+                    print(line)
+                    with lock:
+                        updateAccountReg(line)
+                    break
+                else:  # chang ip
+                    if changIP == False:
+                      with lock:
+                        changIP = True
+                      print("Đang đổi IP...")
+                      changIpByExpressVPN()
+                      time.sleep(1)
+                      with lock:
+                        changIP = False
+                    else:
+                       time.sleep(5)
+                    break
+                   
+              time.sleep(2)
+              # print("Đang đợi code")
+          except Exception as error:
+              pass
+    elif emailSource == 'temp-mail.io':
+        while True:
+          try:
+            userAgent = getUserAgent()
+            email = create_temp_mail(userAgent)
+            password = random_password()
+            # print(email + '|' + password)
+            email_encode = encode_email(email)
+            password_encode = encode_password(password)
+            result = registerCC(email_encode, password_encode)
+            if result != 'success':
+                if changIP == False:
+                    with lock:
+                      changIP = True
+                    print("Đang đổi IP...")
+                    changIpByExpressVPN()
+                    time.sleep(1)
+                    with lock:
+                      changIP = False
+                else:
+                    time.sleep(15)
+                continue
+            # print(result)
+            time.sleep(2)
+            for i in range(10):
+              code = get_temp_mail_messages(email, userAgent)
+              # print('Code: ', code)
+              if code and code != 'watting':
+                code_encode = encode_password(code)
+                userID = register_verify_login(email_encode, password_encode, code_encode)
+                if userID:
+                    line = email + '|' + password + '|' + str(userID)
+                    print(line)
+                    with lock:
+                        updateAccountReg(line)
+                    break
+                else:  # chang ip
+                    if changIP == False:
+                      with lock:
+                        changIP = True
+                      print("Đang đổi IP...")
+                      changIpByExpressVPN()
+                      time.sleep(1)
+                      with lock:
+                        changIP = False
+                    else:
+                       time.sleep(15)
+                    break
+              time.sleep(2)
+              # print("Đang đợi code")
+          except Exception as error:
+              pass
 
 if __name__ == "__main__":
     num_threads = 20  # số luồng muốn chạy song song
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = []
-        for _ in range(num_threads):
-            future = executor.submit(regAccountCC)
+        for i in range(num_threads):
+            if i % 2 == 0:
+                emailSource = 'mail.tm'
+            else:
+                emailSource = 'temp-mail.io'
+            emailSource = 'temp-mail.io'
+            future = executor.submit(regAccountCC, emailSource)
             futures.append(future)
             time.sleep(1)
         for future in as_completed(futures):
