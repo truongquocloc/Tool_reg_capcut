@@ -1,4 +1,7 @@
 
+
+pyuic5 -x main.ui -o main.py
+
+
 pyinstaller MainHandle.py --onefile --console  
 
-pyinstaller main.py --onefile --console  

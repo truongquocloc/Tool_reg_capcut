@@ -31,12 +31,14 @@ class MainHandler(Ui_MainWindow, QtWidgets.QMainWindow):
 
     self.cbSite.addItem("mail.tm", "mail_tm")
     self.cbSite.addItem("temp-mail.io", "temp_mail")
+    self.cbSite.addItem("hotmail", "hotmail")
     domain = self.getDomainBySite("mail.tm")
     self.cbDomain.clear()
     self.cbDomain.addItem(domain)
 
     self.cbSite.currentTextChanged.connect(self.changeSite)
     self.btnStart.clicked.connect(self.startProcess)
+    self.btnSelectPathHotmail.clicked.connect(self.selectFileHotmail)
     
 
 
@@ -47,6 +49,7 @@ class MainHandler(Ui_MainWindow, QtWidgets.QMainWindow):
 
 
   def changeSite(self):
+    self.fHotmail.setEnabled(False)
     if self.cbSite.currentText() == "mail.tm":
        domain = self.getDomainBySite("mail.tm")
        self.cbDomain.clear()
@@ -55,12 +58,25 @@ class MainHandler(Ui_MainWindow, QtWidgets.QMainWindow):
        domain = get_temp_mail_domains()
        self.cbDomain.clear()
        self.cbDomain.addItems(domain)
+    elif self.cbSite.currentText() == "hotmail":
+       domain = "hotmail.com"
+       self.cbDomain.clear()
+       self.cbDomain.addItem(domain)
+       self.fHotmail.setEnabled(True)
+
+  def selectFileHotmail(self):
+      options = QFileDialog.Options()
+      file_path = QFileDialog.getOpenFileName(self, "Chọn file .txt", "", "Text Files (*.txt)", options=options)
+      self.txtPathHotmail.setText(file_path[0])
+
 
   def getDomainBySite(self, site):
      if site == "mail.tm":
        return get_domain()
      elif site == "temp_mail":
        return "temp-mail.io"
+     elif site == "hotmail":
+       return "hotmail.com"
      
 
 
@@ -73,7 +89,7 @@ class mainThread(QThread):
     self.mainHandler = mainHandler
 
   def run(self):
-    num_threads = 5  # số luồng muốn chạy song song
+    num_threads = 1  # số luồng muốn chạy song song
     emailSource = self.mainHandler.cbSite.currentText()
     with ThreadPoolExecutor(max_workers=num_threads) as executor:
         futures = []
@@ -95,72 +111,101 @@ class mainThread(QThread):
     return emailName
   
   def encode_email( self, email: str) -> str:
-    SHIFT = {
-        '@': 5,
-        '0': 5, '1': 3, '2': 5, '3': 3, '4': -3, '5': -5, '6': -3, '7': -5, '8': 5, '9': 3,
-        'a': 3, 'b': 5, 'c': 3, 'd': -3, 'e': -5, 'f': -3, 'g': -5, 'h': 5,
-        'i': 3, 'j': 5, 'k': 3, 'l': -3, 'm': -5, 'n': -3, 'o': -5, 'p': 5,
-        'q': 3, 'r': 5, 's': 3, 't': -3, 'u': -5, 'v': -3, 'w': -5, 'x': 5, 'y': 3, 'z': 5,
-    }
-    s = email.lower()
-    if s.endswith(".com"):
-        s = s[:-4]  # bỏ ".com"
-    out = []
-    for ch in s:
-        out.append((ord(ch) + SHIFT[ch]) & 0xFF)
-    out += b"+fjh"
-    return "".join(f"{b:02x}" for b in out)
-  # Bảng ánh xạ ký tự -> hex 
+      SHIFT = {
+          '@': 5,
+          '0': 5, '1': 3, '2': 5, '3': 3, '4': -3, '5': -5, '6': -3, '7': -5, '8': 5, '9': 3,
+          'a': 3, 'b': 5, 'c': 3, 'd': -3, 'e': -5, 'f': -3, 'g': -5, 'h': 5,
+          'i': 3, 'j': 5, 'k': 3, 'l': -3, 'm': -5, 'n': -3, 'o': -5, 'p': 5,
+          'q': 3, 'r': 5, 's': 3, 't': -3, 'u': -5, 'v': -3, 'w': -5, 'x': 5, 'y': 3, 'z': 5,
+      }
+
+      s = email
+      if s.lower().endswith(".com"):
+          s = s[:-4]  # bỏ ".com"
+
+      out = []
+
+      for ch in s:
+          base = ch.lower()
+
+          if ch.isalpha() and ch.isupper():
+              # Chữ hoa: dùng shift của chữ thường rồi TRỪ 32
+              encoded = (ord(base) + SHIFT[base] - 32) & 0xFF
+          else:
+              # Chữ thường, số, @: xử lý như cũ
+              encoded = (ord(base) + SHIFT[base]) & 0xFF
+
+          out.append(encoded)
+
+      out += b"+fjh"
+      return "".join(f"{b:02x}" for b in out)
 
   def encode_password(self, pw: str) -> str:
       mapping = {
-  # letters
-  'a': '64',  # a +3 -> 'd'
-  'b': '67',  # b +5 -> 'g'
-  'c': '66',  # c +3 -> 'f'
-  'd': '61',  # d -3 -> 'a'
-  'e': '60',  # e -5 -> '`'
-  'f': '63',  # f -3 -> 'c'
-  'g': '62',  # g -5 -> 'b'
-  'h': '6d',  # h +5 -> 'm'
-  'i': '6c',  # i +3 -> 'l'
-  'j': '6f',  # j +5 -> 'o'
-  'k': '6e',  # k +3 -> 'n'
-  'l': '69',  # l -3 -> 'i'
-  'm': '68',  # m -5 -> 'h'
-  'n': '6b',  # n -3 -> 'k'
-  'o': '6a',  # o -5 -> 'j'
-  'p': '75',  # p +5 -> 'u'
-  'q': '74',  # q +3 -> 't'
-  'r': '77',  # r +5 -> 'w'
-  's': '76',  # s +3 -> 'v'
-  't': '71',  # t -3 -> 'q'
-  'u': '70',  # u -5 -> 'p'
-  'v': '73',  # v -3 -> 's'
-  'w': '72',  # w -5 -> 'r'
-  'x': '7d',  # x +5 -> '}'
-  'y': '7c',  # y +3 -> '|'
-  'z': '7f',  # z +5 -> DEL
+          # letters
+          'a': '64',  # d
+          'b': '67',  # g
+          'c': '66',  # f
+          'd': '61',  # a
+          'e': '60',  # `
+          'f': '63',  # c
+          'g': '62',  # b
+          'h': '6d',  # m
+          'i': '6c',  # l
+          'j': '6f',  # o
+          'k': '6e',  # n
+          'l': '69',  # i
+          'm': '68',  # h
+          'n': '6b',  # k
+          'o': '6a',  # j
+          'p': '75',  # u
+          'q': '74',  # t
+          'r': '77',  # w
+          's': '76',  # v
+          't': '71',  # q
+          'u': '70',  # p
+          'v': '73',  # s
+          'w': '72',  # r
+          'x': '7d',  # }
+          'y': '7c',  # |
+          'z': '7f',  # DEL
 
-  # digits
-  '0': '35',  # 0 +5 -> '5'
-  '1': '34',  # 1 +3 -> '4'
-  '2': '37',  # 2 +5 -> '7'
-  '3': '36',  # 3 +3 -> '6'
-  '4': '31',  # 4 -3 -> '1'
-  '5': '30',  # 5 -5 -> '0'
-  '6': '33',  # 6 -3 -> '3'
-  '7': '32',  # 7 -5 -> '2'
-  '8': '3d',  # 8 +5 -> '='
-  '9': '3c',  # 9 +3 -> '<'
+          # digits
+          '0': '35',
+          '1': '34',
+          '2': '37',
+          '3': '36',
+          '4': '31',
+          '5': '30',
+          '6': '33',
+          '7': '32',
+          '8': '3d',
+          '9': '3c',
 
-  # specials / uppercase seen in your data
-  '@': '45',  # @ +5 -> 'E'
-  'T': '51',  # T -3 -> 'Q'
-  }
+          # specials
+          '@': '45',
+          # 'T': '51',  # không cần cũng được vì T sẽ được tính từ 't'
+      }
 
-      """Mã hóa password thành hex theo mapping"""
-      return "".join(mapping[ch] for ch in pw)
+      out = []
+
+      for ch in pw:
+          if ch in mapping:
+              # ký tự thường, số, @,...
+              out.append(mapping[ch])
+          elif ch.isalpha() and ch.isupper():
+              # chữ hoa: dựa vào mapping của chữ thường rồi TRỪ 32
+              low = ch.lower()
+              if low not in mapping:
+                  raise ValueError(f"No mapping for lowercase of {ch}")
+
+              base = int(mapping[low], 16)
+              up = (base - 0x20) & 0xFF
+              out.append(f"{up:02x}")
+          else:
+              raise ValueError(f"Unknown character: {ch}")
+
+      return "".join(out)
 
   def random_date(self, start_year=1990, end_year=2005):
       # Tạo ngày bắt đầu và ngày kết thúc
@@ -208,6 +253,38 @@ class mainThread(QThread):
           print("Đã change ip =======================================================")
       except Exception as e:
         print("Lỗi đổi IP: ", e)
+
+  def getListHotmail(self):
+      with open('list_hotmail.txt', 'r', encoding='utf-8') as file:
+          data = file.read()
+      data = data.split('\n')
+      return data
+
+  def get_hostmail_messages(self, email, password, refresh_token, client_id):
+      url = "https://tools.dongvanfb.net/api/get_messages_oauth2"
+      code = ''
+      payload = {
+          "email": email,
+          "pass": password,
+          "refresh_token": refresh_token,
+          "client_id": client_id
+      }
+      for i in range(10):
+        try:
+          response = requests.post(url, json=payload)
+          result = response.json()
+          if result['status'] == True:
+              if len(result['messages']) > 0:
+                  lastMessage = result['messages'][0]
+                  if (lastMessage['from'] == 'admin@mail.capcut.com') and ('Welcome to CapCut and your verification code is' in lastMessage['subject']):
+                      code = lastMessage['subject'].split()[-1]
+                      if code: return code
+        except Exception as e:
+            print(e)
+        time.sleep(2)
+
+      return code
+
 
   def registerCC(self, email_encode, password_encode, userAgent=None):
       if not userAgent:
@@ -301,10 +378,16 @@ class mainThread(QThread):
           return result['data']['user_id']
       else:
           return None
-
+  
+  def updateFileHostmail(self, listHostmail):
+     listHostmailStr = '\n'.join(listHostmail)
+     listHostmailStr = listHostmailStr.strip()
+     with open('list_hotmail.txt', 'w') as f:
+        f.write(listHostmailStr)
+     
   def regAccountCC(self, emailSource='mail.tm'):
     global changIP
-    if emailSource not in ['mail.tm', 'temp-mail.io']:
+    if emailSource not in ['mail.tm', 'temp-mail.io', 'hotmail']:
         print("Email source không hợp lệ. Chỉ chấp nhận 'mail.tm' hoặc 'temp-mail.io'.")
         return
     if emailSource == 'mail.tm':
@@ -414,7 +497,57 @@ class mainThread(QThread):
               # print("Đang đợi code")
           except Exception as error:
               pass
-
+    elif emailSource == 'hotmail':
+       listHostmail = self.getListHotmail()
+       while True:
+          if len(listHostmail) == 0:
+             print("Hết hostmail!!!")
+             return
+          hostmailInfo = listHostmail.pop(0)
+          hostmailInfoArr = hostmailInfo.split('|')
+          hostmail = hostmailInfoArr[0]
+          password = hostmailInfoArr[1]
+          email_encode = self.encode_email(hostmail)
+          password_encode = self.encode_password(password)
+          result = self.registerCC(email_encode, password_encode)
+          if result != 'success':
+              if changIP == False:
+                  with lock:
+                    changIP = True
+                  print("Đang đổi IP...")
+                  self.changIpByExpressVPN()
+                  time.sleep(1)
+                  with lock:
+                    changIP = False
+              else:
+                  time.sleep(15)
+              continue
+          # print(result)
+          time.sleep(2)
+          for i in range(10):
+            code = self.get_hostmail_messages(hostmail, password, hostmailInfoArr[-2], hostmailInfoArr[-1])
+            if code:
+              code_encode = self.encode_password(code)
+              userID = self.register_verify_login(email_encode, password_encode, code_encode)
+              if userID:
+                  line = hostmail + '|' + password + '|' + str(userID)
+                  print(line)
+                  with lock:
+                      self.updateAccountReg(line)
+                  break
+              else:  # chang ip
+                  if changIP == False:
+                    with lock:
+                      changIP = True
+                    print("Đang đổi IP...")
+                    self.changIpByExpressVPN()
+                    time.sleep(1)
+                    with lock:
+                      changIP = False
+                  else:
+                      time.sleep(15)
+                  break
+          self.updateFileHostmail(listHostmail)
 
 if __name__ == "__main__":
     import sys

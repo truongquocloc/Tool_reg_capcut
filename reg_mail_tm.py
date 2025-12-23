@@ -60,11 +60,11 @@ def create_account(address: str, password: str, userAgent=None):
     if response.status_code == 201:
       return response.json()
     elif response.status_code  == 429:
-      print(response)
+      # print(response)
       time.sleep(random.randint(1,5))
       return create_account(address, password)
     else:
-      print(response)
+      # print(response)
       return ''
 
 def get_me(token: str, userAgent=None):
@@ -128,13 +128,14 @@ def getRandomEmail():
     emailName = ''.join(random.choice(characters) for _ in range(length))
     return emailName
 
-def regMail(userAgent = None):
+def regMail(userAgent = None, domain = None):
     if not userAgent:
       userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
     password = '123456a@'
     while True:
       try:
-        domain = get_domain(userAgent)
+        if not domain:
+          domain = get_domain(userAgent)
         randomEmail = getRandomEmail() + '@' + domain
         randomEmail = randomEmail.lower()
         result = create_account(randomEmail, password, userAgent)

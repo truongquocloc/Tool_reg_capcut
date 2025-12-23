@@ -2,7 +2,7 @@ import requests
 import re
 
 
-def create_temp_mail(userAgent=None):
+def create_temp_mail(userAgent=None, payload=None):
     if not userAgent:
       userAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
     url = "https://api.internal.temp-mail.io/api/v3/email/new"
@@ -18,10 +18,12 @@ def create_temp_mail(userAgent=None):
         "referer": "https://temp-mail.io/",
         "user-agent": userAgent
     }
-    payload = {
-        "min_name_length": 20,
-        "max_name_length": 25
-    }
+    if not payload:
+      payload = {
+          "min_name_length": 20,
+          "max_name_length": 25
+      }
+    
     
     response = requests.post(url, headers=headers, json=payload)
     result = response.json()
@@ -73,6 +75,35 @@ def get_temp_mail_messages(email, userAgent=None):
                 return "waitting"
     except Exception:
         return ''  
+    
+def get_temp_mail_domains():
+    url = "https://api.internal.temp-mail.io/api/v4/domains"
+
+    headers = {
+        "accept": "*/*",
+        "accept-encoding": "gzip, deflate, br, zstd",
+        "accept-language": "vi-VN,vi;q=0.9,fr-FR;q=0.8,fr;q=0.7,en-US;q=0.6,en;q=0.5",
+        "application-name": "web",
+        "application-version": "4.0.0",
+        "content-type": "application/json",
+        "origin": "https://temp-mail.io",
+        "referer": "https://temp-mail.io/",
+        "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+        "sec-ch-ua-mobile": "?0",
+        "sec-ch-ua-platform": '"Windows"',
+        "sec-fetch-dest": "empty",
+        "sec-fetch-mode": "cors",
+        "sec-fetch-site": "same-site",
+        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        "x-cors-header": "iaWg3pchvFx48fY"
+    }
+
+    response = requests.get(url, headers=headers)
+    response.raise_for_status()  # báo lỗi nếu HTTP code != 200
+    data = response.json()
+    data = data['domains']
+    result = [domain['name'] for domain in data]
+    return result
 
 # Test thử
 if __name__ == "__main__":
