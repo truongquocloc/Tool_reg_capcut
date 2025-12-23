@@ -112,17 +112,17 @@ def updateAccountReg(account):
 
 def changIpByExpressVPN():
     try:
-      # with ExpressVpnApi() as api:
-      #   api.start_express_vpn()
-      #   status = api.get_status()
-      #   if status["info"]['connected']:
-      #     api.disconnect()
-      #     api.wait_for_disconnect()
-      #   location_ids = api.locations
-      #   time.sleep(1)
-      #   location_id = random.choice(location_ids)
-      #   api.connect(location_id['id'])
-      #   api.wait_for_connection()
+      with ExpressVpnApi() as api:
+        api.start_express_vpn()
+        status = api.get_status()
+        if status["info"]['connected']:
+          api.disconnect()
+          api.wait_for_disconnect()
+        location_ids = api.locations
+        time.sleep(1)
+        location_id = random.choice(location_ids)
+        api.connect(location_id['id'])
+        api.wait_for_connection()
         print("Đã change ip =======================================================")
     except Exception as e:
       print("Lỗi đổi IP: ", e)
